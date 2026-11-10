@@ -41,8 +41,21 @@
           </button>
         </label>
 
+        <section class="groups-panel" aria-label="笔记分组">
+          <div class="groups-heading">
+            <button class="groups-toggle" id="groupsToggle" type="button" aria-expanded="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+              <span>分组</span>
+            </button>
+            <button class="group-add-button" id="addGroupButton" type="button" aria-label="新增分组">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+          </div>
+          <div class="groups-list" id="groupsList"></div>
+        </section>
+
         <div class="list-heading">
-          <span>全部笔记</span>
+          <span id="currentGroupLabel">默认分组</span>
           <span id="noteCount">0 篇</span>
         </div>
 
@@ -51,7 +64,7 @@
         <div class="sidebar-foot">
           <span class="local-dot" aria-hidden="true"></span>
           <span>按日期分目录保存</span>
-          <span class="app-version" id="appVersion">v1.0.0</span>
+          <span class="app-version" id="appVersion">v1.1.0</span>
         </div>
       </aside>
 
@@ -75,11 +88,15 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 10v8M12 10v8M16 10v8M7 7l1 14h8l1-14" /></svg>
               <span>删除</span>
             </button>
+            <button class="icon-button more-button" type="button" aria-label="更多操作">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
+            </button>
           </div>
         </header>
 
         <section class="editor" id="editorPanel" aria-label="笔记编辑器">
-          <div class="editor-inner">
+          <div class="editor-card">
+            <div class="editor-accent" aria-hidden="true"></div>
             <input
               class="title-input"
               id="titleInput"
@@ -88,20 +105,77 @@
               placeholder="笔记标题"
               aria-label="笔记标题"
             />
-            <div class="title-rule" aria-hidden="true"></div>
-            <textarea
-              class="content-input"
-              id="contentInput"
-              placeholder="从这里开始记录……"
-              aria-label="笔记内容"
-              spellcheck="false"
-            ></textarea>
+
+            <div class="note-details" aria-label="笔记信息">
+              <label class="group-select-label">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h6l2 2h9v9.5h-17z" /><path d="M3.5 7.5V5h6l2 2" /></svg>
+                <select id="noteGroupSelect" aria-label="所属分组"></select>
+              </label>
+              <span class="detail-separator" aria-hidden="true"></span>
+              <span class="note-detail">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2" /><path d="M8 3v5M16 3v5M4 10h16" /></svg>
+                <time id="createdDate"></time>
+              </span>
+              <span class="detail-separator" aria-hidden="true"></span>
+              <span class="note-detail">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></svg>
+                <span id="lastEditedTime"></span>
+              </span>
+            </div>
+
+            <div class="format-toolbar" role="toolbar" aria-label="文本格式">
+              <select class="style-select" id="styleSelect" aria-label="段落样式">
+                <option value="body">正文</option>
+                <option value="heading">标题</option>
+              </select>
+              <span class="toolbar-separator" aria-hidden="true"></span>
+              <button type="button" data-format="bold" aria-label="加粗"><strong>B</strong></button>
+              <button type="button" data-format="italic" aria-label="斜体"><em>I</em></button>
+              <span class="toolbar-separator" aria-hidden="true"></span>
+              <button type="button" data-format="bullet" aria-label="无序列表">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1" /><circle cx="5" cy="12" r="1" /><circle cx="5" cy="17" r="1" /><path d="M9 7h10M9 12h10M9 17h10" /></svg>
+              </button>
+              <button type="button" data-format="number" aria-label="有序列表">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7h10M9 12h10M9 17h10M4 6h1v3M4 13h2l-2 3h2" /></svg>
+              </button>
+              <button type="button" data-format="check" aria-label="待办事项">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m8 12 3 3 5-6" /></svg>
+              </button>
+              <span class="toolbar-separator" aria-hidden="true"></span>
+              <button type="button" data-format="quote" aria-label="引用">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h5v5H7v5H4v-7a3 3 0 0 1 1-3ZM14 7h5v5h-3v5h-3v-7a3 3 0 0 1 1-3Z" /></svg>
+              </button>
+              <button type="button" data-format="divider" aria-label="分隔线">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16" /></svg>
+              </button>
+              <button type="button" data-format="link" aria-label="链接">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 14.5 5-5M7 16l-1 1a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0M17 8l1-1a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0" /></svg>
+              </button>
+            </div>
+
+            <div class="content-editor-wrap">
+              <button class="quick-insert" id="quickInsert" type="button" aria-label="插入新段落">+</button>
+              <textarea
+                class="content-input"
+                id="contentInput"
+                placeholder="从这里开始记录……"
+                aria-label="笔记内容"
+                spellcheck="false"
+              ></textarea>
+            </div>
+
+            <footer class="editor-meta">
+              <span class="editor-storage-state">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M18.5 12a7 7 0 0 0-12-4L4 10M5.5 12a7 7 0 0 0 12 4l2.5-2" /></svg>
+                自动保存&nbsp; · &nbsp;本地 JSON
+              </span>
+              <span>
+                <span id="characterCount">0 字</span>
+                <span class="meta-divider" aria-hidden="true"></span>
+                <span id="paragraphCount">0 段</span>
+              </span>
+            </footer>
           </div>
-          <footer class="editor-meta">
-            <time id="updatedTime"></time>
-            <span class="meta-divider" aria-hidden="true"></span>
-            <span id="characterCount">0 字</span>
-          </footer>
         </section>
 
         <section class="empty-editor" id="emptyEditor" hidden>
@@ -119,6 +193,22 @@
       <span>笔记已删除</span>
       <button id="undoDelete" type="button">撤销</button>
     </div>
+
+    <dialog class="group-dialog" id="groupDialog">
+      <form method="dialog" id="groupForm">
+        <div class="dialog-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3.5 7.5h6l2 2h9v9.5h-17z" /><path d="M3.5 7.5V5h6l2 2" /></svg>
+        </div>
+        <h2>新建分组</h2>
+        <p>为相关笔记创建一个简洁的分类。</p>
+        <label for="groupNameInput">分组名称</label>
+        <input id="groupNameInput" name="groupName" maxlength="20" placeholder="例如：项目记录" autocomplete="off" />
+        <div class="dialog-actions">
+          <button class="dialog-cancel" value="cancel" type="button" id="cancelGroupButton">取消</button>
+          <button class="dialog-confirm" value="confirm" type="submit">创建分组</button>
+        </div>
+      </form>
+    </dialog>
 
     <script src="./app.js"></script>
   </body>

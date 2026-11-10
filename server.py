@@ -5,6 +5,7 @@ import mimetypes
 import os
 import re
 import threading
+import uuid
 import webbrowser
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
@@ -23,6 +24,9 @@ INDEX_FILE = DATA_DIR / "index.json"
 INDEX_TEMP_FILE = DATA_DIR / "index.json.tmp"
 MAX_BODY_SIZE = 5 * 1024 * 1024
 ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
+INDEX_VERSION = 2
+DEFAULT_GROUP_ID = "default"
+DEFAULT_GROUP = {"id": DEFAULT_GROUP_ID, "name": "默认分组", "createdAt": 0}
 BEIJING_TIMEZONE = timezone(timedelta(hours=8))
 WRITE_LOCK = threading.Lock()
 
@@ -41,7 +45,16 @@ APP_VERSION = read_app_version()
 def ensure_data_files() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not INDEX_FILE.exists():
-        atomic_write_json(INDEX_FILE, {"version": 1, "notes": []})
+        atomic_write_json(
+            INDEX_FILE,
+            {"version": INDEX_VERSION, "groups": [DEFAULT_GROUP], "notes": []},
+        )
+        return
+
+    current = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
+    migrated = normalize_index(current)
+    if migrated != current:
+        atomic_write_json(INDEX_FILE, migrated)
 
 
 def atomic_write_json(target: Path, value: object) -> None:
@@ -57,7 +70,46 @@ def read_index() -> dict:
     value = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
     if not isinstance(value, dict) or not isinstance(value.get("notes"), list):
         raise ValueError("data/index.json 格式无效")
-    return value
+    return normalize_index(value)
+
+
+def normalize_index(value: dict) -> dict:
+    raw_groups = value.get("groups")
+    groups = []
+    if isinstance(raw_groups, list):
+        for group in raw_groups:
+            if (
+                isinstance(group, dict)
+                and isinstance(group.get("id"), str)
+                and ID_PATTERN.fullmatch(group["id"])
+                and isinstance(group.get("name"), str)
+                and group["name"].strip()
+            ):
+                groups.append(
+                    {
+                        "id": group["id"],
+                        "name": group["name"].strip()[:20],
+                        "createdAt": group.get("createdAt", 0),
+                    }
+                )
+
+    if not any(group["id"] == DEFAULT_GROUP_ID for group in groups):
+        groups.insert(0, DEFAULT_GROUP.copy())
+
+    group_ids = {group["id"] for group in groups}
+    notes = []
+    for metadata in value.get("notes", []):
+        if not isinstance(metadata, dict):
+            continue
+        group_id = metadata.get("groupId")
+        notes.append(
+            {
+                **metadata,
+                "groupId": group_id if group_id in group_ids else DEFAULT_GROUP_ID,
+            }
+        )
+
+    return {"version": INDEX_VERSION, "groups": groups, "notes": notes}
 
 
 def format_storage_date(timestamp_ms: int | float) -> str:
@@ -84,6 +136,13 @@ def validate_note(note: object, expected_id: str) -> bool:
         and len(note["title"]) <= 80
         and isinstance(note.get("content"), str)
         and isinstance(note.get("pinned"), bool)
+        and (
+            note.get("groupId") is None
+            or (
+                isinstance(note.get("groupId"), str)
+                and ID_PATTERN.fullmatch(note["groupId"])
+            )
+        )
         and is_number(note.get("createdAt"))
         and is_number(note.get("updatedAt"))
     )
@@ -96,6 +155,7 @@ def to_metadata(note: dict) -> dict:
         "title": note["title"],
         "preview": preview,
         "pinned": note["pinned"],
+        "groupId": note["groupId"],
         "createdAt": note["createdAt"],
         "updatedAt": note["updatedAt"],
     }
@@ -113,7 +173,10 @@ def save_note(note: dict) -> None:
             if existing_position is not None
             else note["createdAt"]
         )
-        saved_note = {**note, "createdAt": created_at}
+        group_ids = {group["id"] for group in index["groups"]}
+        requested_group_id = note.get("groupId")
+        group_id = requested_group_id if requested_group_id in group_ids else DEFAULT_GROUP_ID
+        saved_note = {**note, "createdAt": created_at, "groupId": group_id}
         metadata = to_metadata(saved_note)
 
         if existing_position is None:
@@ -126,7 +189,10 @@ def save_note(note: dict) -> None:
             raise ValueError("笔记 ID 无效")
         target.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_json(target, saved_note)
-        atomic_write_json(INDEX_FILE, {"version": 1, "notes": index["notes"]})
+        atomic_write_json(
+            INDEX_FILE,
+            {"version": INDEX_VERSION, "groups": index["groups"], "notes": index["notes"]},
+        )
 
 
 def delete_note(note_id: str) -> None:
@@ -140,7 +206,37 @@ def delete_note(note_id: str) -> None:
             if target:
                 target.unlink(missing_ok=True)
 
-        atomic_write_json(INDEX_FILE, {"version": 1, "notes": index["notes"]})
+        atomic_write_json(
+            INDEX_FILE,
+            {"version": INDEX_VERSION, "groups": index["groups"], "notes": index["notes"]},
+        )
+
+
+def create_group(name: str) -> dict:
+    clean_name = name.strip()
+    if not clean_name or len(clean_name) > 20:
+        raise ValueError("分组名称需要 1–20 个字符")
+
+    with WRITE_LOCK:
+        index = read_index()
+        existing = next(
+            (group for group in index["groups"] if group["name"] == clean_name),
+            None,
+        )
+        if existing:
+            return existing
+
+        group = {
+            "id": f"group-{uuid.uuid4()}",
+            "name": clean_name,
+            "createdAt": int(datetime.now(tz=BEIJING_TIMEZONE).timestamp() * 1000),
+        }
+        index["groups"].append(group)
+        atomic_write_json(
+            INDEX_FILE,
+            {"version": INDEX_VERSION, "groups": index["groups"], "notes": index["notes"]},
+        )
+        return group
 
 
 class XxsNoteHandler(BaseHTTPRequestHandler):
@@ -180,6 +276,9 @@ class XxsNoteHandler(BaseHTTPRequestHandler):
     def do_PUT(self) -> None:
         self.route_request()
 
+    def do_POST(self) -> None:
+        self.route_request()
+
     def do_DELETE(self) -> None:
         self.route_request()
 
@@ -188,6 +287,21 @@ class XxsNoteHandler(BaseHTTPRequestHandler):
             path = unquote(urlsplit(self.path).path)
             if path == "/api/notes" and self.command in {"GET", "HEAD"}:
                 self.send_json(HTTPStatus.OK, read_index()["notes"])
+                return
+
+            if path == "/api/groups" and self.command in {"GET", "HEAD"}:
+                self.send_json(HTTPStatus.OK, read_index()["groups"])
+                return
+
+            if path == "/api/groups" and self.command == "POST":
+                body = self.read_json_body()
+                if not isinstance(body, dict) or not isinstance(body.get("name"), str):
+                    raise RequestError(HTTPStatus.BAD_REQUEST, "分组名称无效")
+                try:
+                    group = create_group(body["name"])
+                except ValueError as error:
+                    raise RequestError(HTTPStatus.BAD_REQUEST, str(error)) from error
+                self.send_json(HTTPStatus.CREATED, group)
                 return
 
             if path == "/api/version" and self.command in {"GET", "HEAD"}:
@@ -297,9 +411,10 @@ def main() -> None:
     print(f"索引文件：{INDEX_FILE}")
     print(f"笔记目录：{DATA_DIR}\\YYYY-MM-DD")
     print("关闭此窗口即可停止服务")
-    browser_timer = threading.Timer(0.3, lambda: webbrowser.open(app_url))
-    browser_timer.daemon = True
-    browser_timer.start()
+    if os.environ.get("XXSNOTE_OPEN_BROWSER", "1") != "0":
+        browser_timer = threading.Timer(0.3, lambda: webbrowser.open(app_url))
+        browser_timer.daemon = True
+        browser_timer.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

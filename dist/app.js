@@ -2,20 +2,35 @@
   "use strict";
 
   const SAVE_DELAY = 280;
+  const DEFAULT_GROUP = { id: "default", name: "默认分组", createdAt: 0 };
 
   const elements = {
     body: document.body,
     notesList: document.querySelector("#notesList"),
     noteCount: document.querySelector("#noteCount"),
+    currentGroupLabel: document.querySelector("#currentGroupLabel"),
+    groupsList: document.querySelector("#groupsList"),
+    groupsToggle: document.querySelector("#groupsToggle"),
+    addGroupButton: document.querySelector("#addGroupButton"),
+    groupDialog: document.querySelector("#groupDialog"),
+    groupForm: document.querySelector("#groupForm"),
+    groupNameInput: document.querySelector("#groupNameInput"),
+    cancelGroupButton: document.querySelector("#cancelGroupButton"),
     newNoteButton: document.querySelector("#newNoteButton"),
     emptyNewButton: document.querySelector("#emptyNewButton"),
     searchInput: document.querySelector("#searchInput"),
     clearSearch: document.querySelector("#clearSearch"),
     titleInput: document.querySelector("#titleInput"),
     contentInput: document.querySelector("#contentInput"),
+    noteGroupSelect: document.querySelector("#noteGroupSelect"),
+    createdDate: document.querySelector("#createdDate"),
+    lastEditedTime: document.querySelector("#lastEditedTime"),
+    paragraphCount: document.querySelector("#paragraphCount"),
+    styleSelect: document.querySelector("#styleSelect"),
+    formatToolbar: document.querySelector(".format-toolbar"),
+    quickInsert: document.querySelector("#quickInsert"),
     editorPanel: document.querySelector("#editorPanel"),
     emptyEditor: document.querySelector("#emptyEditor"),
-    updatedTime: document.querySelector("#updatedTime"),
     characterCount: document.querySelector("#characterCount"),
     saveState: document.querySelector("#saveState"),
     pinButton: document.querySelector("#pinButton"),
@@ -28,7 +43,9 @@
   };
 
   let notes = [];
+  let groups = [DEFAULT_GROUP];
   let activeId = null;
+  let activeGroupId = DEFAULT_GROUP.id;
   let searchTerm = "";
   let saveTimer = null;
   let saveChain = Promise.resolve();
@@ -36,7 +53,7 @@
   let deletedSnapshot = null;
 
   void loadVersion();
-  initialize();
+  void initialize();
 
   async function loadVersion() {
     try {
@@ -54,10 +71,17 @@
   async function initialize() {
     setSaveState("saving", "正在读取…");
     try {
-      const response = await fetch("/api/notes", { cache: "no-store" });
-      if (!response.ok) throw new Error(`读取失败：${response.status}`);
-      const value = await response.json();
-      notes = Array.isArray(value) ? value.filter(isValidMetadata).map(normalizeMetadata) : [];
+      const [notesResponse, groupsResponse] = await Promise.all([
+        fetch("/api/notes", { cache: "no-store" }),
+        fetch("/api/groups", { cache: "no-store" }),
+      ]);
+      if (!notesResponse.ok) throw new Error(`读取失败：${notesResponse.status}`);
+
+      const noteValues = await notesResponse.json();
+      const groupValues = groupsResponse.ok ? await groupsResponse.json() : [DEFAULT_GROUP];
+      groups = normalizeGroups(groupValues);
+      notes = Array.isArray(noteValues) ? noteValues.filter(isValidMetadata).map(normalizeMetadata) : [];
+      activeGroupId = groups[0]?.id ?? DEFAULT_GROUP.id;
 
       if (notes.length === 0) {
         await addNote({
@@ -66,7 +90,7 @@
           focus: false,
         });
       } else {
-        activeId = sortNotes(notes)[0]?.id ?? null;
+        activeId = sortNotes(notesForActiveGroup())[0]?.id ?? null;
         if (activeId) await ensureLoaded(activeId);
         setSaveState("saved", "已保存到 JSON");
         renderAll();
@@ -80,6 +104,14 @@
     }
   }
 
+  function normalizeGroups(value) {
+    const valid = Array.isArray(value)
+      ? value.filter((group) => group && typeof group.id === "string" && typeof group.name === "string")
+      : [];
+    if (!valid.some((group) => group.id === DEFAULT_GROUP.id)) valid.unshift(DEFAULT_GROUP);
+    return valid;
+  }
+
   function createNote(overrides = {}) {
     const now = Date.now();
     return {
@@ -88,6 +120,7 @@
       content: "",
       preview: "",
       pinned: false,
+      groupId: activeGroupId || DEFAULT_GROUP.id,
       createdAt: now,
       updatedAt: now,
       ...overrides,
@@ -105,11 +138,13 @@
 
   function normalizeMetadata(note) {
     const now = Date.now();
+    const groupId = groups.some((group) => group.id === note.groupId) ? note.groupId : DEFAULT_GROUP.id;
     return {
       id: note.id,
       title: note.title,
       preview: typeof note.preview === "string" ? note.preview : "",
       pinned: Boolean(note.pinned),
+      groupId,
       createdAt: Number(note.createdAt) || now,
       updatedAt: Number(note.updatedAt) || now,
       content: undefined,
@@ -123,7 +158,9 @@
     const response = await fetch(`/api/notes/${encodeURIComponent(id)}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`读取笔记失败：${response.status}`);
     const fullNote = await response.json();
-    Object.assign(existing, fullNote);
+    Object.assign(existing, fullNote, {
+      groupId: groups.some((group) => group.id === fullNote.groupId) ? fullNote.groupId : DEFAULT_GROUP.id,
+    });
     return existing;
   }
 
@@ -134,6 +171,7 @@
       title: note.title,
       content: note.content,
       pinned: Boolean(note.pinned),
+      groupId: note.groupId || DEFAULT_GROUP.id,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt,
     });
@@ -201,24 +239,74 @@
     });
   }
 
+  function notesForActiveGroup() {
+    return notes.filter((note) => note.groupId === activeGroupId);
+  }
+
   function getActiveNote() {
     return notes.find((note) => note.id === activeId) ?? null;
   }
 
+  function getActiveGroup() {
+    return groups.find((group) => group.id === activeGroupId) ?? groups[0] ?? DEFAULT_GROUP;
+  }
+
   function renderAll() {
+    renderGroups();
     renderList();
     renderEditor();
   }
 
+  function renderGroups() {
+    elements.groupsList.replaceChildren();
+    const fragment = document.createDocumentFragment();
+    for (const group of groups) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = `group-row${group.id === activeGroupId ? " active" : ""}`;
+      row.dataset.groupId = group.id;
+
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("class", "group-row-icon");
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = '<path d="M3.5 7.5h6l2 2h9v9.5h-17z" /><path d="M3.5 7.5V5h6l2 2" />';
+
+      const name = document.createElement("span");
+      name.className = "group-row-name";
+      name.textContent = group.name;
+
+      const count = document.createElement("span");
+      count.className = "group-row-count";
+      count.textContent = String(notes.filter((note) => note.groupId === group.id).length);
+
+      row.append(icon, name, count);
+      row.addEventListener("click", () => void selectGroup(group.id));
+      fragment.append(row);
+    }
+    elements.groupsList.append(fragment);
+
+    const activeGroup = getActiveGroup();
+    elements.currentGroupLabel.textContent = activeGroup.name;
+    elements.noteGroupSelect.replaceChildren();
+    for (const group of groups) {
+      const option = document.createElement("option");
+      option.value = group.id;
+      option.textContent = group.name;
+      elements.noteGroupSelect.append(option);
+    }
+  }
+
   function renderList() {
     const normalizedTerm = searchTerm.trim().toLocaleLowerCase("zh-CN");
-    const filtered = sortNotes(notes).filter((note) => {
+    const groupNotes = notesForActiveGroup();
+    const filtered = sortNotes(groupNotes).filter((note) => {
       if (!normalizedTerm) return true;
       const searchable = `${note.title}\n${note.content ?? note.preview ?? ""}`;
       return searchable.toLocaleLowerCase("zh-CN").includes(normalizedTerm);
     });
 
-    elements.noteCount.textContent = normalizedTerm ? `${filtered.length} 条结果` : `${notes.length} 篇`;
+    elements.noteCount.textContent = normalizedTerm ? `${filtered.length} 条结果` : `${groupNotes.length} 篇`;
     elements.notesList.replaceChildren();
 
     if (filtered.length === 0) {
@@ -226,7 +314,7 @@
       empty.className = "no-results";
       empty.innerHTML = normalizedTerm
         ? "<strong>没有找到相关笔记</strong><span>可搜索标题和内容摘要</span>"
-        : "<strong>暂无笔记</strong><span>点击上方按钮新建</span>";
+        : "<strong>这个分组还是空的</strong><span>点击上方按钮新建笔记</span>";
       elements.notesList.append(empty);
       return;
     }
@@ -284,11 +372,34 @@
 
     if (document.activeElement !== elements.titleInput) elements.titleInput.value = note.title;
     if (document.activeElement !== elements.contentInput) elements.contentInput.value = note.content ?? "";
+    elements.noteGroupSelect.value = note.groupId || DEFAULT_GROUP.id;
     elements.pinButton.setAttribute("aria-pressed", String(note.pinned));
     elements.pinButton.querySelector("span").textContent = note.pinned ? "取消置顶" : "置顶";
-    elements.updatedTime.dateTime = new Date(note.updatedAt).toISOString();
-    elements.updatedTime.textContent = `更新于 ${formatEditorTime(note.updatedAt)}`;
+    elements.createdDate.dateTime = new Date(note.createdAt).toISOString();
+    elements.createdDate.textContent = formatCreatedDate(note.createdAt);
+    elements.lastEditedTime.textContent = `最后编辑 ${formatClockTime(note.updatedAt)}`;
     elements.characterCount.textContent = `${countCharacters(note.content ?? "")} 字`;
+    elements.paragraphCount.textContent = `${countParagraphs(note.content ?? "")} 段`;
+  }
+
+  async function selectGroup(groupId) {
+    if (!groups.some((group) => group.id === groupId)) return;
+    flushSave();
+    activeGroupId = groupId;
+    searchTerm = "";
+    elements.searchInput.value = "";
+    elements.clearSearch.hidden = true;
+    activeId = sortNotes(notesForActiveGroup())[0]?.id ?? null;
+    if (activeId) {
+      try {
+        await ensureLoaded(activeId);
+      } catch (error) {
+        setSaveState("error", "无法读取这篇笔记");
+        console.error(error);
+      }
+    }
+    renderAll();
+    closeSidebar();
   }
 
   async function selectNote(id) {
@@ -330,9 +441,10 @@
     if (!note) return;
     note[field] = value;
     note.updatedAt = Date.now();
-    note.preview = makePreview(note.content);
-    elements.updatedTime.textContent = `更新于 ${formatEditorTime(note.updatedAt)}`;
-    elements.characterCount.textContent = `${countCharacters(note.content)} 字`;
+    note.preview = makePreview(note.content ?? "");
+    elements.lastEditedTime.textContent = `最后编辑 ${formatClockTime(note.updatedAt)}`;
+    elements.characterCount.textContent = `${countCharacters(note.content ?? "")} 字`;
+    elements.paragraphCount.textContent = `${countParagraphs(note.content ?? "")} 段`;
     renderList();
     queueSave();
   }
@@ -354,7 +466,7 @@
     deletedSnapshot = { note: { ...notes[index] }, index };
     const deletedId = notes[index].id;
     notes.splice(index, 1);
-    activeId = sortNotes(notes)[0]?.id ?? null;
+    activeId = sortNotes(notesForActiveGroup())[0]?.id ?? null;
     renderAll();
     showToast();
     void removeNoteFile(deletedId);
@@ -374,11 +486,68 @@
     clearTimeout(toastTimer);
     const restored = deletedSnapshot.note;
     notes.splice(Math.min(deletedSnapshot.index, notes.length), 0, restored);
+    activeGroupId = restored.groupId || DEFAULT_GROUP.id;
     activeId = restored.id;
     deletedSnapshot = null;
     elements.toast.hidden = true;
     void persistNote(restored);
     renderAll();
+  }
+
+  async function createGroup(name) {
+    const response = await fetch("/api/groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "创建分组失败");
+    if (!groups.some((group) => group.id === result.id)) groups.push(result);
+    activeGroupId = result.id;
+    activeId = sortNotes(notesForActiveGroup())[0]?.id ?? null;
+    renderAll();
+  }
+
+  function applyFormat(format) {
+    const textarea = elements.contentInput;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = textarea.value.slice(start, end);
+    let replacement = selected;
+    let cursorOffset = 0;
+
+    const wrappers = {
+      bold: ["**", "**"],
+      italic: ["*", "*"],
+      link: ["[", "](https://)"],
+    };
+    const prefixes = {
+      bullet: "- ",
+      number: "1. ",
+      check: "- [ ] ",
+      quote: "> ",
+      heading: "## ",
+    };
+
+    if (wrappers[format]) {
+      const [before, after] = wrappers[format];
+      replacement = `${before}${selected || "文字"}${after}`;
+      cursorOffset = before.length + (selected || "文字").length;
+    } else if (prefixes[format]) {
+      replacement = selected
+        ? selected.split("\n").map((line) => `${prefixes[format]}${line}`).join("\n")
+        : prefixes[format];
+      cursorOffset = replacement.length;
+    } else if (format === "divider") {
+      replacement = `${start > 0 ? "\n" : ""}---\n`;
+      cursorOffset = replacement.length;
+    }
+
+    textarea.setRangeText(replacement, start, end, "end");
+    const nextCursor = start + (cursorOffset || replacement.length);
+    textarea.setSelectionRange(nextCursor, nextCursor);
+    textarea.focus();
+    updateActiveNote("content", textarea.value);
   }
 
   function showToast() {
@@ -397,28 +566,28 @@
   function formatListTime(timestamp) {
     const date = new Date(timestamp);
     const today = new Date();
-    if (date.toDateString() === today.toDateString()) {
-      return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
-    }
+    if (date.toDateString() === today.toDateString()) return formatClockTime(timestamp);
     if (date.getFullYear() === today.getFullYear()) {
       return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(date);
     }
     return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric" }).format(date);
   }
 
-  function formatEditorTime(timestamp) {
-    return new Intl.DateTimeFormat("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date(timestamp));
+  function formatCreatedDate(timestamp) {
+    return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date(timestamp));
+  }
+
+  function formatClockTime(timestamp) {
+    return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(timestamp));
   }
 
   function countCharacters(text) {
     return [...text.replace(/\s/g, "")].length;
+  }
+
+  function countParagraphs(text) {
+    if (!text.trim()) return 0;
+    return text.split(/\n\s*\n/).filter((paragraph) => paragraph.trim()).length;
   }
 
   function openSidebar() {
@@ -434,12 +603,51 @@
   elements.emptyNewButton.addEventListener("click", () => void addNote());
   elements.titleInput.addEventListener("input", (event) => updateActiveNote("title", event.target.value));
   elements.contentInput.addEventListener("input", (event) => updateActiveNote("content", event.target.value));
+  elements.noteGroupSelect.addEventListener("change", (event) => {
+    const note = getActiveNote();
+    if (!note) return;
+    note.groupId = event.target.value;
+    note.updatedAt = Date.now();
+    activeGroupId = note.groupId;
+    void persistNote(note);
+    renderAll();
+  });
   elements.pinButton.addEventListener("click", togglePin);
   elements.deleteButton.addEventListener("click", () => void deleteActiveNote());
   elements.undoDelete.addEventListener("click", undoDelete);
   elements.openSidebar.addEventListener("click", openSidebar);
   elements.closeSidebar.addEventListener("click", closeSidebar);
   elements.sidebarBackdrop.addEventListener("click", closeSidebar);
+
+  elements.groupsToggle.addEventListener("click", () => {
+    const expanded = elements.groupsToggle.getAttribute("aria-expanded") === "true";
+    elements.groupsToggle.setAttribute("aria-expanded", String(!expanded));
+    elements.groupsList.classList.toggle("collapsed", expanded);
+  });
+
+  elements.addGroupButton.addEventListener("click", () => {
+    elements.groupNameInput.value = "";
+    elements.groupDialog.showModal();
+    requestAnimationFrame(() => elements.groupNameInput.focus());
+  });
+
+  elements.cancelGroupButton.addEventListener("click", () => elements.groupDialog.close());
+  elements.groupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = elements.groupNameInput.value.trim();
+    if (!name) {
+      elements.groupNameInput.focus();
+      return;
+    }
+    try {
+      await createGroup(name);
+      elements.groupDialog.close();
+    } catch (error) {
+      elements.groupNameInput.setCustomValidity(error.message);
+      elements.groupNameInput.reportValidity();
+      elements.groupNameInput.setCustomValidity("");
+    }
+  });
 
   elements.searchInput.addEventListener("input", (event) => {
     searchTerm = event.target.value;
@@ -455,6 +663,24 @@
     renderList();
   });
 
+  elements.formatToolbar.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-format]");
+    if (button) applyFormat(button.dataset.format);
+  });
+
+  elements.styleSelect.addEventListener("change", () => {
+    if (elements.styleSelect.value === "heading") applyFormat("heading");
+    elements.styleSelect.value = "body";
+  });
+
+  elements.quickInsert.addEventListener("click", () => {
+    const start = elements.contentInput.selectionStart;
+    const end = elements.contentInput.selectionEnd;
+    elements.contentInput.setRangeText("\n\n", start, end, "end");
+    elements.contentInput.focus();
+    updateActiveNote("content", elements.contentInput.value);
+  });
+
   document.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
       event.preventDefault();
@@ -463,9 +689,13 @@
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
       flushSave();
-      setSaveState("saved", "已保存到 JSON");
+      setSaveState("saving", "正在保存…");
+      void persistNote(getActiveNote());
     }
-    if (event.key === "Escape") closeSidebar();
+    if (event.key === "Escape") {
+      if (elements.groupDialog.open) elements.groupDialog.close();
+      closeSidebar();
+    }
   });
 
   document.addEventListener("visibilitychange", () => {

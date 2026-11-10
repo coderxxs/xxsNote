@@ -1,10 +1,10 @@
 # xxsNote 发布目录
 
-当前稳定版本：`v1.0.0`
+当前稳定版本：`v1.1.0`
 
 ## 发布文件
 
-- `xxsNote-v1.0.0-win-x64.zip`：Windows x64 免安装便携包
+- `xxsNote-v1.1.0-win-x64.zip`：Windows x64 免安装便携包
 - `checksums.sha256`：发布包 SHA-256 校验值
 
 ## 使用方式

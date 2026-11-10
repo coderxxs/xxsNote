@@ -1,4 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
+  "groups": [
+    {
+      "id": "default",
+      "name": "默认分组",
+      "createdAt": 0
+    }
+  ],
   "notes": []
 }
