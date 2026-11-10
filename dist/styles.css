@@ -352,11 +352,17 @@ textarea:focus-visible {
   display: flex;
   min-height: 47px;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
+  padding: 0 24px;
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 10px;
+}
+
+.app-version {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .local-dot,

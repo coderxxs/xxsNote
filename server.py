@@ -17,12 +17,24 @@ PORT = int(os.environ.get("XXSNOTE_PORT", "4173"))
 ROOT = Path(__file__).resolve().parent
 PUBLIC_DIR = ROOT / "dist"
 DATA_DIR = ROOT / "data"
+VERSION_FILE = ROOT / "VERSION"
 INDEX_FILE = DATA_DIR / "index.json"
 INDEX_TEMP_FILE = DATA_DIR / "index.json.tmp"
 MAX_BODY_SIZE = 5 * 1024 * 1024
 ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
 BEIJING_TIMEZONE = timezone(timedelta(hours=8))
 WRITE_LOCK = threading.Lock()
+
+
+def read_app_version() -> str:
+    try:
+        version = VERSION_FILE.read_text(encoding="utf-8").strip()
+        return version or "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
+APP_VERSION = read_app_version()
 
 
 def ensure_data_files() -> None:
@@ -131,7 +143,7 @@ def delete_note(note_id: str) -> None:
 
 
 class XxsNoteHandler(BaseHTTPRequestHandler):
-    server_version = "xxsNote/1.0"
+    server_version = f"xxsNote/{APP_VERSION}"
 
     def log_message(self, format_string: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {format_string % args}")
@@ -175,6 +187,17 @@ class XxsNoteHandler(BaseHTTPRequestHandler):
             path = unquote(urlsplit(self.path).path)
             if path == "/api/notes" and self.command in {"GET", "HEAD"}:
                 self.send_json(HTTPStatus.OK, read_index()["notes"])
+                return
+
+            if path == "/api/version" and self.command in {"GET", "HEAD"}:
+                self.send_json(
+                    HTTPStatus.OK,
+                    {
+                        "name": "xxsNote",
+                        "version": APP_VERSION,
+                        "platform": "windows-x64",
+                    },
+                )
                 return
 
             match = re.fullmatch(r"/api/notes/([^/]+)", path)
@@ -268,7 +291,7 @@ class RequestError(Exception):
 def main() -> None:
     ensure_data_files()
     server = ThreadingHTTPServer((HOST, PORT), XxsNoteHandler)
-    print(f"xxsNote 已启动：http://{HOST}:{PORT}")
+    print(f"xxsNote v{APP_VERSION} 已启动：http://{HOST}:{PORT}")
     print(f"索引文件：{INDEX_FILE}")
     print(f"笔记目录：{DATA_DIR}\\YYYY-MM-DD")
     print("关闭此窗口即可停止服务")

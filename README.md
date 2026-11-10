@@ -2,6 +2,8 @@
 
 一个无需账号、无需网络、无需安装运行环境的轻量记事本。每篇笔记都会按创建日期，单独保存为项目 `data/YYYY-MM-DD` 目录中的一个 JSON 文件。
 
+当前版本：`v1.0.0`（版本来源：根目录 `VERSION`）
+
 ## 使用方式
 
 Windows 下双击 `启动xxsNote.cmd`，浏览器会自动打开：
@@ -38,3 +40,10 @@ http://127.0.0.1:4173
 - 内置解释器：`runtime/python.exe`
 - Python 许可文件：`runtime/LICENSE.txt`
 - 启动时使用隔离模式，不会调用系统 PATH、用户级 Python 包或 Node.js
+
+## 发布包
+
+- 发布目录：`release/`
+- Windows x64 便携包：`release/xxsNote-v1.0.0-win-x64.zip`
+- SHA-256 校验：`release/checksums.sha256`
+- 重新打包：运行 `powershell -ExecutionPolicy Bypass -File .\tools\build-release.ps1`

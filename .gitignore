@@ -12,3 +12,6 @@ data/*/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Release staging directory
+release/.staging/

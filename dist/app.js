@@ -35,7 +35,21 @@
   let toastTimer = null;
   let deletedSnapshot = null;
 
+  void loadVersion();
   initialize();
+
+  async function loadVersion() {
+    try {
+      const response = await fetch("/api/version", { cache: "no-store" });
+      if (!response.ok) return;
+      const info = await response.json();
+      if (typeof info.version === "string" && info.version) {
+        document.querySelector("#appVersion").textContent = `v${info.version}`;
+      }
+    } catch {
+      // 保留 HTML 中的构建版本号，不影响笔记功能。
+    }
+  }
 
   async function initialize() {
     setSaveState("saving", "正在读取…");
