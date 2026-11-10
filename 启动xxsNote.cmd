@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 >nul
+title xxsNote v1.0.0
 cd /d "%~dp0"
 
 if not exist "%~dp0runtime\python.exe" (
@@ -8,7 +9,7 @@ if not exist "%~dp0runtime\python.exe" (
   exit /b 1
 )
 
-start "" "http://127.0.0.1:4173"
+echo 正在启动 xxsNote，请稍候...
 "%~dp0runtime\python.exe" -I -B "%~dp0server.py"
 
 if errorlevel 1 pause

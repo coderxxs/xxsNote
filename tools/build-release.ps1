@@ -40,6 +40,11 @@ foreach ($file in $files) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination (Join-Path $packageRoot $file)
 }
 
+# cmd.exe requires CRLF line endings for reliable batch parsing.
+$launcherPath = Join-Path $packageRoot "启动xxsNote.cmd"
+$launcherContent = (Get-Content -Raw -LiteralPath $launcherPath) -replace "`r?`n", "`r`n"
+[IO.File]::WriteAllText($launcherPath, $launcherContent, [Text.UTF8Encoding]::new($false))
+
 Copy-Item -LiteralPath (Join-Path $projectRoot "dist") -Destination $packageRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot "runtime") -Destination $packageRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot "data\index.json") -Destination (Join-Path $packageRoot "data\index.json")

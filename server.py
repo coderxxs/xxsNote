@@ -5,6 +5,7 @@ import mimetypes
 import os
 import re
 import threading
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -291,10 +292,14 @@ class RequestError(Exception):
 def main() -> None:
     ensure_data_files()
     server = ThreadingHTTPServer((HOST, PORT), XxsNoteHandler)
-    print(f"xxsNote v{APP_VERSION} 已启动：http://{HOST}:{PORT}")
+    app_url = f"http://{HOST}:{PORT}"
+    print(f"xxsNote v{APP_VERSION} 已启动：{app_url}")
     print(f"索引文件：{INDEX_FILE}")
     print(f"笔记目录：{DATA_DIR}\\YYYY-MM-DD")
     print("关闭此窗口即可停止服务")
+    browser_timer = threading.Timer(0.3, lambda: webbrowser.open(app_url))
+    browser_timer.daemon = True
+    browser_timer.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
