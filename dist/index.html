@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="一款纯本地运行、数据保存为 JSON 文件的工作记事本。"
+    />
+    <meta name="theme-color" content="#f5f1e8" />
+    <title>xxsNote · 本地记事本</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="笔记列表">
+        <div class="brand-row">
+          <a class="brand" href="#" aria-label="xxsNote 首页">
+            <span class="brand-mark" aria-hidden="true">x</span>
+            <span>
+              <strong>xxsNote</strong>
+              <small>LOCAL NOTES</small>
+            </span>
+          </a>
+          <button class="icon-button sidebar-close" id="closeSidebar" type="button" aria-label="关闭笔记列表">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+
+        <button class="new-note-button" id="newNoteButton" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          <span>新建笔记</span>
+          <kbd>Ctrl N</kbd>
+        </button>
+
+        <label class="search-box" for="searchInput">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+          <input id="searchInput" type="search" placeholder="搜索笔记" autocomplete="off" />
+          <button id="clearSearch" type="button" aria-label="清空搜索" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17" /></svg>
+          </button>
+        </label>
+
+        <div class="list-heading">
+          <span>全部笔记</span>
+          <span id="noteCount">0 篇</span>
+        </div>
+
+        <div class="notes-list" id="notesList" role="listbox" aria-label="全部笔记"></div>
+
+        <div class="sidebar-foot">
+          <span class="local-dot" aria-hidden="true"></span>
+          <span>按日期分目录保存</span>
+        </div>
+      </aside>
+
+      <button class="sidebar-backdrop" id="sidebarBackdrop" type="button" aria-label="关闭笔记列表"></button>
+
+      <main class="workspace">
+        <header class="topbar">
+          <button class="icon-button menu-button" id="openSidebar" type="button" aria-label="打开笔记列表">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+          <div class="save-state" id="saveState" role="status" aria-live="polite">
+            <span class="save-dot" aria-hidden="true"></span>
+            <span>已保存</span>
+          </div>
+          <div class="toolbar">
+            <button class="text-button" id="pinButton" type="button" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 6 0 1 5 3 3v2h-6v6l-1 1-1-1v-6H5v-2l3-3 1-5Z" /></svg>
+              <span>置顶</span>
+            </button>
+            <button class="text-button danger-button" id="deleteButton" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 10v8M12 10v8M16 10v8M7 7l1 14h8l1-14" /></svg>
+              <span>删除</span>
+            </button>
+          </div>
+        </header>
+
+        <section class="editor" id="editorPanel" aria-label="笔记编辑器">
+          <div class="editor-inner">
+            <input
+              class="title-input"
+              id="titleInput"
+              type="text"
+              maxlength="80"
+              placeholder="笔记标题"
+              aria-label="笔记标题"
+            />
+            <div class="title-rule" aria-hidden="true"></div>
+            <textarea
+              class="content-input"
+              id="contentInput"
+              placeholder="从这里开始记录……"
+              aria-label="笔记内容"
+              spellcheck="false"
+            ></textarea>
+          </div>
+          <footer class="editor-meta">
+            <time id="updatedTime"></time>
+            <span class="meta-divider" aria-hidden="true"></span>
+            <span id="characterCount">0 字</span>
+          </footer>
+        </section>
+
+        <section class="empty-editor" id="emptyEditor" hidden>
+          <div class="empty-illustration" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <h1>还没有笔记</h1>
+          <p>把待办、灵感或工作记录留在这里。</p>
+          <button class="empty-new-button" id="emptyNewButton" type="button">写第一篇笔记</button>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <span>笔记已删除</span>
+      <button id="undoDelete" type="button">撤销</button>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+# Runtime-generated cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.tmp
+
+# Personal note content is local-only
+data/*/
+
+# Local editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
