@@ -250,15 +250,20 @@ svg {
 }
 
 .groups-panel {
-  margin: 0 16px 16px;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  margin: 0 13px;
+  overflow: hidden;
 }
 
 .groups-heading {
   display: flex;
-  height: 34px;
+  min-height: 40px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
+  padding: 0 14px;
 }
 
 .groups-toggle,
@@ -271,15 +276,14 @@ svg {
 }
 
 .groups-toggle {
-  gap: 7px;
+  gap: 8px;
   padding: 6px 0;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: 0.05em;
 }
 
 .groups-toggle svg {
-  width: 13px;
+  width: 14px;
   transition: transform 160ms ease;
 }
 
@@ -300,32 +304,41 @@ svg {
 }
 
 .group-add-button svg {
-  width: 17px;
+  width: 20px;
 }
 
 .groups-list {
   display: grid;
+  min-height: 0;
+  align-content: start;
+  flex: 1;
   gap: 3px;
-  overflow: hidden;
+  overflow-y: auto;
+  padding: 3px 3px 18px;
+  scrollbar-color: #ccc9c0 transparent;
+  scrollbar-width: thin;
 }
 
 .groups-list.collapsed {
   display: none;
 }
 
+.group-section {
+  display: grid;
+}
+
 .group-row {
-  position: relative;
   display: flex;
   width: 100%;
-  min-height: 38px;
+  min-height: 48px;
   align-items: center;
-  gap: 9px;
-  padding: 0 12px;
+  gap: 11px;
+  padding: 0 14px;
   border: 0;
-  border-radius: 11px;
+  border-radius: 14px;
   background: transparent;
   color: #5f6662;
-  font-size: 12px;
+  font-size: 14px;
   text-align: left;
   cursor: pointer;
 }
@@ -340,17 +353,20 @@ svg {
   font-weight: 700;
 }
 
-.group-row.active::before {
-  width: 7px;
-  height: 7px;
+.group-row-status {
+  width: 8px;
+  height: 8px;
   flex: 0 0 auto;
   border-radius: 50%;
+  background: transparent;
+}
+
+.group-row.active .group-row-status {
   background: var(--orange);
-  content: "";
 }
 
 .group-row-icon {
-  width: 17px;
+  width: 20px;
   flex: 0 0 auto;
 }
 
@@ -364,27 +380,31 @@ svg {
 
 .group-row-count {
   color: #7e847f;
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-.list-heading {
-  display: flex;
-  justify-content: space-between;
-  padding: 0 27px 10px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+.group-notes {
+  display: grid;
+  margin: 2px 4px 8px 23px;
+  padding: 2px 0 3px 9px;
+  border-left: 1px solid rgba(72, 107, 93, 0.2);
 }
 
-.notes-list {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 13px 18px;
-  scrollbar-color: #ccc9c0 transparent;
-  scrollbar-width: thin;
+.group-notes[hidden] {
+  display: none;
+}
+
+.group-notes .note-card {
+  margin: 1px 0 5px;
+  padding: 12px 13px 11px 17px;
+  border-radius: 11px;
+}
+
+.group-empty {
+  padding: 10px 14px 12px;
+  color: #9a9d99;
+  font-size: 11px;
 }
 
 .note-card {

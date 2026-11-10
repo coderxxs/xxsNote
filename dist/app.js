@@ -6,9 +6,6 @@
 
   const elements = {
     body: document.body,
-    notesList: document.querySelector("#notesList"),
-    noteCount: document.querySelector("#noteCount"),
-    currentGroupLabel: document.querySelector("#currentGroupLabel"),
     groupsList: document.querySelector("#groupsList"),
     groupsToggle: document.querySelector("#groupsToggle"),
     addGroupButton: document.querySelector("#addGroupButton"),
@@ -46,6 +43,7 @@
   let groups = [DEFAULT_GROUP];
   let activeId = null;
   let activeGroupId = DEFAULT_GROUP.id;
+  const expandedGroupIds = new Set([DEFAULT_GROUP.id]);
   let searchTerm = "";
   let saveTimer = null;
   let saveChain = Promise.resolve();
@@ -82,6 +80,7 @@
       groups = normalizeGroups(groupValues);
       notes = Array.isArray(noteValues) ? noteValues.filter(isValidMetadata).map(normalizeMetadata) : [];
       activeGroupId = groups[0]?.id ?? DEFAULT_GROUP.id;
+      expandedGroupIds.add(activeGroupId);
 
       if (notes.length === 0) {
         await addNote({
@@ -247,30 +246,50 @@
     return notes.find((note) => note.id === activeId) ?? null;
   }
 
-  function getActiveGroup() {
-    return groups.find((group) => group.id === activeGroupId) ?? groups[0] ?? DEFAULT_GROUP;
-  }
-
   function renderAll() {
     renderGroups();
-    renderList();
     renderEditor();
   }
 
   function renderGroups() {
     elements.groupsList.replaceChildren();
+    const normalizedTerm = searchTerm.trim().toLocaleLowerCase("zh-CN");
     const fragment = document.createDocumentFragment();
+    let resultCount = 0;
+
     for (const group of groups) {
+      const groupNotes = sortNotes(notes.filter((note) => note.groupId === group.id));
+      const visibleNotes = groupNotes.filter((note) => {
+        if (!normalizedTerm) return true;
+        const searchable = `${note.title}\n${note.content ?? note.preview ?? ""}`;
+        return searchable.toLocaleLowerCase("zh-CN").includes(normalizedTerm);
+      });
+      resultCount += visibleNotes.length;
+
+      const isExpanded = normalizedTerm
+        ? visibleNotes.length > 0
+        : expandedGroupIds.has(group.id);
+      const section = document.createElement("section");
+      section.className = "group-section";
+
       const row = document.createElement("button");
       row.type = "button";
       row.className = `group-row${group.id === activeGroupId ? " active" : ""}`;
       row.dataset.groupId = group.id;
+      row.setAttribute("aria-expanded", String(isExpanded));
+      row.setAttribute("aria-controls", `group-notes-${group.id}`);
+
+      const status = document.createElement("span");
+      status.className = "group-row-status";
+      status.setAttribute("aria-hidden", "true");
 
       const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       icon.setAttribute("viewBox", "0 0 24 24");
       icon.setAttribute("class", "group-row-icon");
       icon.setAttribute("aria-hidden", "true");
-      icon.innerHTML = '<path d="M3.5 7.5h6l2 2h9v9.5h-17z" /><path d="M3.5 7.5V5h6l2 2" />';
+      icon.innerHTML = isExpanded
+        ? '<path d="M3.5 8h6l2 2h9l-2 9h-15z" /><path d="M3.5 8V5.5h6l2 2h7V10" />'
+        : '<path d="M3.5 7.5h6l2 2h9v9.5h-17z" /><path d="M3.5 7.5V5h6l2 2" />';
 
       const name = document.createElement("span");
       name.className = "group-row-name";
@@ -278,16 +297,42 @@
 
       const count = document.createElement("span");
       count.className = "group-row-count";
-      count.textContent = String(notes.filter((note) => note.groupId === group.id).length);
+      count.textContent = String(groupNotes.length);
 
-      row.append(icon, name, count);
-      row.addEventListener("click", () => void selectGroup(group.id));
-      fragment.append(row);
+      row.append(status, icon, name, count);
+      row.addEventListener("click", () => toggleGroup(group.id));
+      section.append(row);
+
+      const nestedList = document.createElement("div");
+      nestedList.className = "group-notes";
+      nestedList.id = `group-notes-${group.id}`;
+      nestedList.setAttribute("role", "listbox");
+      nestedList.setAttribute("aria-label", `${group.name}中的笔记`);
+      nestedList.hidden = !isExpanded;
+
+      if (isExpanded) {
+        if (visibleNotes.length > 0) {
+          for (const note of visibleNotes) nestedList.append(createNoteCard(note));
+        } else if (!normalizedTerm) {
+          const empty = document.createElement("div");
+          empty.className = "group-empty";
+          empty.textContent = "暂无笔记";
+          nestedList.append(empty);
+        }
+      }
+
+      section.append(nestedList);
+      fragment.append(section);
     }
-    elements.groupsList.append(fragment);
 
-    const activeGroup = getActiveGroup();
-    elements.currentGroupLabel.textContent = activeGroup.name;
+    elements.groupsList.append(fragment);
+    if (normalizedTerm && resultCount === 0) {
+      const empty = document.createElement("div");
+      empty.className = "no-results";
+      empty.innerHTML = "<strong>没有找到相关笔记</strong><span>可搜索标题和内容摘要</span>";
+      elements.groupsList.append(empty);
+    }
+
     elements.noteGroupSelect.replaceChildren();
     for (const group of groups) {
       const option = document.createElement("option");
@@ -295,33 +340,6 @@
       option.textContent = group.name;
       elements.noteGroupSelect.append(option);
     }
-  }
-
-  function renderList() {
-    const normalizedTerm = searchTerm.trim().toLocaleLowerCase("zh-CN");
-    const groupNotes = notesForActiveGroup();
-    const filtered = sortNotes(groupNotes).filter((note) => {
-      if (!normalizedTerm) return true;
-      const searchable = `${note.title}\n${note.content ?? note.preview ?? ""}`;
-      return searchable.toLocaleLowerCase("zh-CN").includes(normalizedTerm);
-    });
-
-    elements.noteCount.textContent = normalizedTerm ? `${filtered.length} 条结果` : `${groupNotes.length} 篇`;
-    elements.notesList.replaceChildren();
-
-    if (filtered.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "no-results";
-      empty.innerHTML = normalizedTerm
-        ? "<strong>没有找到相关笔记</strong><span>可搜索标题和内容摘要</span>"
-        : "<strong>这个分组还是空的</strong><span>点击上方按钮新建笔记</span>";
-      elements.notesList.append(empty);
-      return;
-    }
-
-    const fragment = document.createDocumentFragment();
-    for (const note of filtered) fragment.append(createNoteCard(note));
-    elements.notesList.append(fragment);
   }
 
   function createNoteCard(note) {
@@ -382,34 +400,26 @@
     elements.paragraphCount.textContent = `${countParagraphs(note.content ?? "")} 段`;
   }
 
-  async function selectGroup(groupId) {
+  function toggleGroup(groupId) {
     if (!groups.some((group) => group.id === groupId)) return;
     flushSave();
     activeGroupId = groupId;
-    searchTerm = "";
-    elements.searchInput.value = "";
-    elements.clearSearch.hidden = true;
-    activeId = sortNotes(notesForActiveGroup())[0]?.id ?? null;
-    if (activeId) {
-      try {
-        await ensureLoaded(activeId);
-      } catch (error) {
-        setSaveState("error", "无法读取这篇笔记");
-        console.error(error);
-      }
-    }
-    renderAll();
-    closeSidebar();
+    if (expandedGroupIds.has(groupId)) expandedGroupIds.delete(groupId);
+    else expandedGroupIds.add(groupId);
+    renderGroups();
   }
 
   async function selectNote(id) {
-    if (!notes.some((note) => note.id === id) || id === activeId) {
+    const selectedNote = notes.find((note) => note.id === id);
+    if (!selectedNote || id === activeId) {
       closeSidebar();
       return;
     }
     flushSave();
+    activeGroupId = selectedNote.groupId || DEFAULT_GROUP.id;
+    expandedGroupIds.add(activeGroupId);
     activeId = id;
-    renderList();
+    renderGroups();
     closeSidebar();
     try {
       await ensureLoaded(id);
@@ -427,6 +437,7 @@
     note.preview = makePreview(note.content);
     notes.push(note);
     activeId = note.id;
+    expandedGroupIds.add(activeGroupId);
     searchTerm = "";
     elements.searchInput.value = "";
     elements.clearSearch.hidden = true;
@@ -445,7 +456,7 @@
     elements.lastEditedTime.textContent = `最后编辑 ${formatClockTime(note.updatedAt)}`;
     elements.characterCount.textContent = `${countCharacters(note.content ?? "")} 字`;
     elements.paragraphCount.textContent = `${countParagraphs(note.content ?? "")} 段`;
-    renderList();
+    renderGroups();
     queueSave();
   }
 
@@ -465,6 +476,7 @@
     saveTimer = null;
     deletedSnapshot = { note: { ...notes[index] }, index };
     const deletedId = notes[index].id;
+    activeGroupId = notes[index].groupId || DEFAULT_GROUP.id;
     notes.splice(index, 1);
     activeId = sortNotes(notesForActiveGroup())[0]?.id ?? null;
     renderAll();
@@ -487,6 +499,7 @@
     const restored = deletedSnapshot.note;
     notes.splice(Math.min(deletedSnapshot.index, notes.length), 0, restored);
     activeGroupId = restored.groupId || DEFAULT_GROUP.id;
+    expandedGroupIds.add(activeGroupId);
     activeId = restored.id;
     deletedSnapshot = null;
     elements.toast.hidden = true;
@@ -504,6 +517,7 @@
     if (!response.ok) throw new Error(result.error || "创建分组失败");
     if (!groups.some((group) => group.id === result.id)) groups.push(result);
     activeGroupId = result.id;
+    expandedGroupIds.add(result.id);
     activeId = sortNotes(notesForActiveGroup())[0]?.id ?? null;
     renderAll();
   }
@@ -609,6 +623,7 @@
     note.groupId = event.target.value;
     note.updatedAt = Date.now();
     activeGroupId = note.groupId;
+    expandedGroupIds.add(activeGroupId);
     void persistNote(note);
     renderAll();
   });
@@ -652,7 +667,7 @@
   elements.searchInput.addEventListener("input", (event) => {
     searchTerm = event.target.value;
     elements.clearSearch.hidden = !searchTerm;
-    renderList();
+    renderGroups();
   });
 
   elements.clearSearch.addEventListener("click", () => {
@@ -660,7 +675,7 @@
     elements.searchInput.value = "";
     elements.clearSearch.hidden = true;
     elements.searchInput.focus();
-    renderList();
+    renderGroups();
   });
 
   elements.formatToolbar.addEventListener("click", (event) => {
