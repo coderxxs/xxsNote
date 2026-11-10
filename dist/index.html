@@ -57,7 +57,7 @@
         <div class="sidebar-foot">
           <span class="local-dot" aria-hidden="true"></span>
           <span>按日期分目录保存</span>
-          <span class="app-version" id="appVersion">v1.1.1</span>
+          <span class="app-version" id="appVersion">v1.1.2</span>
         </div>
       </aside>
 
@@ -199,6 +199,22 @@
         <div class="dialog-actions">
           <button class="dialog-cancel" value="cancel" type="button" id="cancelGroupButton">取消</button>
           <button class="dialog-confirm" value="confirm" type="submit">创建分组</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="group-dialog delete-dialog" id="deleteDialog" aria-labelledby="deleteDialogTitle">
+      <form method="dialog" id="deleteForm">
+        <div class="dialog-icon dialog-icon-danger" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V4h6v3M8 10v8M12 10v8M16 10v8M7 7l1 14h8l1-14" /></svg>
+        </div>
+        <h2 id="deleteDialogTitle">确认删除笔记？</h2>
+        <p class="delete-dialog-copy">
+          即将删除“<strong id="deleteNoteTitle">无标题笔记</strong>”。删除后仍可通过底部提示撤销。
+        </p>
+        <div class="dialog-actions">
+          <button class="dialog-cancel" value="cancel" type="button" id="cancelDeleteButton" autofocus>取消</button>
+          <button class="dialog-confirm dialog-danger" value="confirm" type="submit">确认删除</button>
         </div>
       </form>
     </dialog>

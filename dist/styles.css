@@ -991,6 +991,11 @@ svg {
 
 .dialog-icon svg { width: 22px; }
 
+.dialog-icon-danger {
+  background: #f7e5e1;
+  color: var(--danger);
+}
+
 .group-dialog h2 {
   margin: 0 0 6px;
   font-family: Georgia, "Noto Serif SC", serif;
@@ -1001,6 +1006,12 @@ svg {
   margin: 0 0 22px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.65;
+}
+
+.delete-dialog-copy strong {
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .group-dialog label {
@@ -1049,6 +1060,14 @@ svg {
   border: 0;
   background: var(--ink);
   color: white;
+}
+
+.dialog-danger {
+  background: var(--danger);
+}
+
+.dialog-danger:hover {
+  background: #923f38;
 }
 
 .sidebar-backdrop { display: none; }

@@ -32,6 +32,10 @@
     saveState: document.querySelector("#saveState"),
     pinButton: document.querySelector("#pinButton"),
     deleteButton: document.querySelector("#deleteButton"),
+    deleteDialog: document.querySelector("#deleteDialog"),
+    deleteForm: document.querySelector("#deleteForm"),
+    deleteNoteTitle: document.querySelector("#deleteNoteTitle"),
+    cancelDeleteButton: document.querySelector("#cancelDeleteButton"),
     toast: document.querySelector("#toast"),
     undoDelete: document.querySelector("#undoDelete"),
     openSidebar: document.querySelector("#openSidebar"),
@@ -469,6 +473,15 @@
     renderAll();
   }
 
+  function openDeleteDialog() {
+    const note = getActiveNote();
+    if (!note) return;
+    flushSave();
+    elements.deleteNoteTitle.textContent = note.title.trim() || "无标题笔记";
+    elements.deleteDialog.showModal();
+    requestAnimationFrame(() => elements.cancelDeleteButton.focus());
+  }
+
   async function deleteActiveNote() {
     const index = notes.findIndex((note) => note.id === activeId);
     if (index < 0) return;
@@ -628,7 +641,13 @@
     renderAll();
   });
   elements.pinButton.addEventListener("click", togglePin);
-  elements.deleteButton.addEventListener("click", () => void deleteActiveNote());
+  elements.deleteButton.addEventListener("click", openDeleteDialog);
+  elements.cancelDeleteButton.addEventListener("click", () => elements.deleteDialog.close());
+  elements.deleteForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    elements.deleteDialog.close();
+    void deleteActiveNote();
+  });
   elements.undoDelete.addEventListener("click", undoDelete);
   elements.openSidebar.addEventListener("click", openSidebar);
   elements.closeSidebar.addEventListener("click", closeSidebar);
@@ -708,6 +727,10 @@
       void persistNote(getActiveNote());
     }
     if (event.key === "Escape") {
+      if (elements.deleteDialog.open) {
+        elements.deleteDialog.close();
+        return;
+      }
       if (elements.groupDialog.open) elements.groupDialog.close();
       closeSidebar();
     }
