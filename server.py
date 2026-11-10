@@ -135,6 +135,10 @@ def validate_note(note: object, expected_id: str) -> bool:
         and isinstance(note.get("title"), str)
         and len(note["title"]) <= 80
         and isinstance(note.get("content"), str)
+        and (
+            note.get("contentHtml") is None
+            or isinstance(note.get("contentHtml"), str)
+        )
         and isinstance(note.get("pinned"), bool)
         and (
             note.get("groupId") is None

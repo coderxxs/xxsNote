@@ -664,8 +664,7 @@ svg {
   line-height: 1.22;
 }
 
-.title-input::placeholder,
-.content-input::placeholder {
+.title-input::placeholder {
   color: #b7b9b5;
 }
 
@@ -808,11 +807,55 @@ svg {
 .content-input {
   min-height: 320px;
   flex: 1;
-  resize: none;
+  overflow-y: auto;
   font-size: 16px;
   line-height: 1.9;
+  overflow-wrap: anywhere;
   scrollbar-color: #c9cec5 transparent;
   scrollbar-width: thin;
+}
+
+.content-input:empty::before {
+  color: #b7b9b5;
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.content-input p,
+.content-input div {
+  margin: 0 0 0.9em;
+}
+
+.content-input h2 {
+  margin: 0.45em 0 0.55em;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 1.55em;
+  line-height: 1.45;
+}
+
+.content-input ul,
+.content-input ol {
+  margin: 0.4em 0 0.9em;
+  padding-left: 1.7em;
+}
+
+.content-input blockquote {
+  margin: 0.6em 0 1em;
+  padding: 0.15em 0 0.15em 1em;
+  border-left: 3px solid #9eafa5;
+  color: #5f6964;
+}
+
+.content-input a {
+  color: var(--sage);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.content-input hr {
+  margin: 1.3em 0;
+  border: 0;
+  border-top: 1px solid var(--line);
 }
 
 .content-input::selection,

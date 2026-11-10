@@ -3,6 +3,9 @@
 
   const SAVE_DELAY = 280;
   const DEFAULT_GROUP = { id: "default", name: "默认分组", createdAt: 0 };
+  const ALLOWED_EDITOR_TAGS = new Set([
+    "A", "B", "BLOCKQUOTE", "BR", "DIV", "EM", "H2", "HR", "I", "LI", "OL", "P", "STRONG", "UL",
+  ]);
 
   const elements = {
     body: document.body,
@@ -53,6 +56,7 @@
   let saveChain = Promise.resolve();
   let toastTimer = null;
   let deletedSnapshot = null;
+  let savedEditorRange = null;
 
   void loadVersion();
   void initialize();
@@ -117,10 +121,11 @@
 
   function createNote(overrides = {}) {
     const now = Date.now();
-    return {
+    const note = {
       id: makeId(),
       title: "",
       content: "",
+      contentHtml: "",
       preview: "",
       pinned: false,
       groupId: activeGroupId || DEFAULT_GROUP.id,
@@ -128,6 +133,8 @@
       updatedAt: now,
       ...overrides,
     };
+    if (!note.contentHtml && note.content) note.contentHtml = plainTextToHtml(note.content);
+    return note;
   }
 
   function makeId() {
@@ -161,8 +168,12 @@
     const response = await fetch(`/api/notes/${encodeURIComponent(id)}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`读取笔记失败：${response.status}`);
     const fullNote = await response.json();
+    const contentHtml = typeof fullNote.contentHtml === "string"
+      ? sanitizeEditorHtml(fullNote.contentHtml)
+      : plainTextToHtml(fullNote.content ?? "");
     Object.assign(existing, fullNote, {
       groupId: groups.some((group) => group.id === fullNote.groupId) ? fullNote.groupId : DEFAULT_GROUP.id,
+      contentHtml,
     });
     return existing;
   }
@@ -173,6 +184,7 @@
       id: note.id,
       title: note.title,
       content: note.content,
+      contentHtml: sanitizeEditorHtml(note.contentHtml ?? plainTextToHtml(note.content)),
       pinned: Boolean(note.pinned),
       groupId: note.groupId || DEFAULT_GROUP.id,
       createdAt: note.createdAt,
@@ -393,7 +405,13 @@
     if (!note) return;
 
     if (document.activeElement !== elements.titleInput) elements.titleInput.value = note.title;
-    if (document.activeElement !== elements.contentInput) elements.contentInput.value = note.content ?? "";
+    const editorHtml = sanitizeEditorHtml(note.contentHtml ?? plainTextToHtml(note.content ?? ""));
+    note.contentHtml = editorHtml;
+    if (document.activeElement !== elements.contentInput || elements.contentInput.dataset.noteId !== note.id) {
+      elements.contentInput.innerHTML = editorHtml;
+      elements.contentInput.dataset.noteId = note.id;
+      savedEditorRange = null;
+    }
     elements.noteGroupSelect.value = note.groupId || DEFAULT_GROUP.id;
     elements.pinButton.setAttribute("aria-pressed", String(note.pinned));
     elements.pinButton.querySelector("span").textContent = note.pinned ? "取消置顶" : "置顶";
@@ -460,6 +478,20 @@
     elements.lastEditedTime.textContent = `最后编辑 ${formatClockTime(note.updatedAt)}`;
     elements.characterCount.textContent = `${countCharacters(note.content ?? "")} 字`;
     elements.paragraphCount.textContent = `${countParagraphs(note.content ?? "")} 段`;
+    renderGroups();
+    queueSave();
+  }
+
+  function updateActiveContent() {
+    const note = getActiveNote();
+    if (!note) return;
+    note.content = readEditorText();
+    note.contentHtml = sanitizeEditorHtml(elements.contentInput.innerHTML);
+    note.updatedAt = Date.now();
+    note.preview = makePreview(note.content);
+    elements.lastEditedTime.textContent = `最后编辑 ${formatClockTime(note.updatedAt)}`;
+    elements.characterCount.textContent = `${countCharacters(note.content)} 字`;
+    elements.paragraphCount.textContent = `${countParagraphs(note.content)} 段`;
     renderGroups();
     queueSave();
   }
@@ -536,45 +568,133 @@
   }
 
   function applyFormat(format) {
-    const textarea = elements.contentInput;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = textarea.value.slice(start, end);
-    let replacement = selected;
-    let cursorOffset = 0;
+    if (!getActiveNote()) return;
+    restoreEditorSelection();
 
-    const wrappers = {
-      bold: ["**", "**"],
-      italic: ["*", "*"],
-      link: ["[", "](https://)"],
-    };
-    const prefixes = {
-      bullet: "- ",
-      number: "1. ",
-      check: "- [ ] ",
-      quote: "> ",
-      heading: "## ",
+    const commands = {
+      bold: ["bold"],
+      italic: ["italic"],
+      bullet: ["insertUnorderedList"],
+      number: ["insertOrderedList"],
+      quote: ["formatBlock", "blockquote"],
+      divider: ["insertHorizontalRule"],
+      heading: ["formatBlock", "h2"],
+      body: ["formatBlock", "p"],
+      check: ["insertText", "☐ "],
     };
 
-    if (wrappers[format]) {
-      const [before, after] = wrappers[format];
-      replacement = `${before}${selected || "文字"}${after}`;
-      cursorOffset = before.length + (selected || "文字").length;
-    } else if (prefixes[format]) {
-      replacement = selected
-        ? selected.split("\n").map((line) => `${prefixes[format]}${line}`).join("\n")
-        : prefixes[format];
-      cursorOffset = replacement.length;
-    } else if (format === "divider") {
-      replacement = `${start > 0 ? "\n" : ""}---\n`;
-      cursorOffset = replacement.length;
+    if (format === "link") {
+      const entered = window.prompt("请输入链接地址", "https://");
+      if (entered === null) return;
+      const href = normalizeLinkUrl(entered);
+      if (!href) return;
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) {
+        document.execCommand("createLink", false, href);
+      } else {
+        const safeHref = escapeHtml(href);
+        document.execCommand("insertHTML", false, `<a href="${safeHref}">${safeHref}</a>`);
+      }
+    } else if (commands[format]) {
+      const [command, value = null] = commands[format];
+      document.execCommand(command, false, value);
     }
 
-    textarea.setRangeText(replacement, start, end, "end");
-    const nextCursor = start + (cursorOffset || replacement.length);
-    textarea.setSelectionRange(nextCursor, nextCursor);
-    textarea.focus();
-    updateActiveNote("content", textarea.value);
+    saveEditorSelection();
+    updateActiveContent();
+    updateToolbarState();
+  }
+
+  function saveEditorSelection() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    const container = range.commonAncestorContainer;
+    if (container === elements.contentInput || elements.contentInput.contains(container)) {
+      savedEditorRange = range.cloneRange();
+    }
+  }
+
+  function restoreEditorSelection() {
+    elements.contentInput.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    if (savedEditorRange && savedEditorRange.commonAncestorContainer.isConnected) {
+      selection.addRange(savedEditorRange);
+      return;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(elements.contentInput);
+    range.collapse(false);
+    selection.addRange(range);
+  }
+
+  function updateToolbarState() {
+    for (const [format, command] of Object.entries({
+      bold: "bold",
+      italic: "italic",
+      bullet: "insertUnorderedList",
+      number: "insertOrderedList",
+    })) {
+      const button = elements.formatToolbar.querySelector(`[data-format="${format}"]`);
+      button?.classList.toggle("active", document.queryCommandState(command));
+    }
+    const block = String(document.queryCommandValue("formatBlock") || "").toLowerCase();
+    elements.styleSelect.value = block === "h2" ? "heading" : "body";
+  }
+
+  function readEditorText() {
+    return elements.contentInput.innerText
+      .replace(/\u00a0/g, " ")
+      .replace(/\r/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trimEnd();
+  }
+
+  function plainTextToHtml(text) {
+    if (!text) return "";
+    return text
+      .split(/\n{2,}/)
+      .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+      .join("");
+  }
+
+  function sanitizeEditorHtml(html) {
+    const template = document.createElement("template");
+    template.innerHTML = typeof html === "string" ? html : "";
+    const descendants = [...template.content.querySelectorAll("*")].reverse();
+    for (const element of descendants) {
+      if (!ALLOWED_EDITOR_TAGS.has(element.tagName)) {
+        element.replaceWith(...element.childNodes);
+        continue;
+      }
+      const href = element.tagName === "A" ? normalizeLinkUrl(element.getAttribute("href") || "") : "";
+      for (const attribute of [...element.attributes]) element.removeAttribute(attribute.name);
+      if (element.tagName === "A" && href) element.setAttribute("href", href);
+    }
+    return template.innerHTML;
+  }
+
+  function normalizeLinkUrl(value) {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return "";
+    const candidate = /^(https?:\/\/|mailto:)/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    try {
+      const parsed = new URL(candidate);
+      return ["http:", "https:", "mailto:"].includes(parsed.protocol) ? candidate : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function showToast() {
@@ -629,7 +749,13 @@
   elements.newNoteButton.addEventListener("click", () => void addNote());
   elements.emptyNewButton.addEventListener("click", () => void addNote());
   elements.titleInput.addEventListener("input", (event) => updateActiveNote("title", event.target.value));
-  elements.contentInput.addEventListener("input", (event) => updateActiveNote("content", event.target.value));
+  elements.contentInput.addEventListener("input", updateActiveContent);
+  elements.contentInput.addEventListener("paste", (event) => {
+    event.preventDefault();
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    document.execCommand("insertText", false, text);
+    updateActiveContent();
+  });
   elements.noteGroupSelect.addEventListener("change", (event) => {
     const note = getActiveNote();
     if (!note) return;
@@ -702,17 +828,24 @@
     if (button) applyFormat(button.dataset.format);
   });
 
+  elements.formatToolbar.addEventListener("mousedown", (event) => {
+    if (event.target.closest("button[data-format]")) event.preventDefault();
+  });
+
   elements.styleSelect.addEventListener("change", () => {
-    if (elements.styleSelect.value === "heading") applyFormat("heading");
-    elements.styleSelect.value = "body";
+    applyFormat(elements.styleSelect.value);
   });
 
   elements.quickInsert.addEventListener("click", () => {
-    const start = elements.contentInput.selectionStart;
-    const end = elements.contentInput.selectionEnd;
-    elements.contentInput.setRangeText("\n\n", start, end, "end");
-    elements.contentInput.focus();
-    updateActiveNote("content", elements.contentInput.value);
+    restoreEditorSelection();
+    document.execCommand("insertParagraph");
+    saveEditorSelection();
+    updateActiveContent();
+  });
+
+  document.addEventListener("selectionchange", () => {
+    saveEditorSelection();
+    updateToolbarState();
   });
 
   document.addEventListener("keydown", (event) => {

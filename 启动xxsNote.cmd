@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title xxsNote v1.1.2
+title xxsNote v1.2.0
 cd /d "%~dp0"
 
 if not exist "%~dp0runtime\python.exe" (
