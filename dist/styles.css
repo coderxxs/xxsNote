@@ -809,7 +809,7 @@ svg {
   flex: 1;
   overflow-y: auto;
   font-size: 16px;
-  line-height: 1.9;
+  line-height: 1.72;
   overflow-wrap: anywhere;
   scrollbar-color: #c9cec5 transparent;
   scrollbar-width: thin;
@@ -823,24 +823,28 @@ svg {
 
 .content-input p,
 .content-input div {
-  margin: 0 0 0.9em;
+  margin: 0;
 }
 
 .content-input h2 {
-  margin: 0.45em 0 0.55em;
+  margin: 0;
   font-family: Georgia, "Noto Serif SC", serif;
   font-size: 1.55em;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .content-input ul,
 .content-input ol {
-  margin: 0.4em 0 0.9em;
+  margin: 0;
   padding-left: 1.7em;
 }
 
+.content-input li {
+  margin: 0;
+}
+
 .content-input blockquote {
-  margin: 0.6em 0 1em;
+  margin: 0;
   padding: 0.15em 0 0.15em 1em;
   border-left: 3px solid #9eafa5;
   color: #5f6964;
@@ -1176,7 +1180,7 @@ svg {
   .note-detail:last-child { display: none; }
   .editor-card { padding-inline: 20px; border-radius: 14px; }
   .editor { padding: 10px; }
-  .content-input { font-size: 15px; line-height: 1.8; }
+  .content-input { font-size: 15px; line-height: 1.7; }
   .toolbar-separator { margin-inline: 2px; }
   .format-toolbar { padding-inline: 7px; }
   .editor-meta { align-items: flex-start; flex-direction: column; justify-content: center; }

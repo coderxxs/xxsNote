@@ -645,19 +645,47 @@
   }
 
   function readEditorText() {
-    return elements.contentInput.innerText
+    return normalizePlainText(elements.contentInput.innerText).trimEnd();
+  }
+
+  function normalizePlainText(value) {
+    return String(value || "")
       .replace(/\u00a0/g, " ")
-      .replace(/\r/g, "")
-      .replace(/\n{3,}/g, "\n\n")
-      .trimEnd();
+      .replace(/\r\n?/g, "\n")
+      .replace(/\n[\t ]*\n+/g, "\n");
   }
 
   function plainTextToHtml(text) {
     if (!text) return "";
     return text
       .split(/\n{2,}/)
-      .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+      .map((block) => {
+        const lines = block.split("\n");
+        if (lines.length === 1 && /^##\s+/.test(lines[0])) {
+          return `<h2>${legacyInlineToHtml(lines[0].replace(/^##\s+/, ""))}</h2>`;
+        }
+        if (lines.length === 1 && /^---+$/.test(lines[0].trim())) return "<hr>";
+        if (lines.every((line) => /^-\s+\[\s\]\s+/.test(line))) {
+          return `<ul>${lines.map((line) => `<li>☐ ${legacyInlineToHtml(line.replace(/^-\s+\[\s\]\s+/, ""))}</li>`).join("")}</ul>`;
+        }
+        if (lines.every((line) => /^-\s+/.test(line))) {
+          return `<ul>${lines.map((line) => `<li>${legacyInlineToHtml(line.replace(/^-\s+/, ""))}</li>`).join("")}</ul>`;
+        }
+        if (lines.every((line) => /^\d+\.\s+/.test(line))) {
+          return `<ol>${lines.map((line) => `<li>${legacyInlineToHtml(line.replace(/^\d+\.\s+/, ""))}</li>`).join("")}</ol>`;
+        }
+        if (lines.every((line) => /^>\s+/.test(line))) {
+          return `<blockquote>${lines.map((line) => legacyInlineToHtml(line.replace(/^>\s+/, ""))).join("<br>")}</blockquote>`;
+        }
+        return `<p>${lines.map(legacyInlineToHtml).join("<br>")}</p>`;
+      })
       .join("");
+  }
+
+  function legacyInlineToHtml(value) {
+    return escapeHtml(value)
+      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
   }
 
   function sanitizeEditorHtml(html) {
@@ -734,7 +762,7 @@
 
   function countParagraphs(text) {
     if (!text.trim()) return 0;
-    return text.split(/\n\s*\n/).filter((paragraph) => paragraph.trim()).length;
+    return text.split("\n").filter((line) => line.trim()).length;
   }
 
   function openSidebar() {
@@ -752,9 +780,17 @@
   elements.contentInput.addEventListener("input", updateActiveContent);
   elements.contentInput.addEventListener("paste", (event) => {
     event.preventDefault();
-    const text = event.clipboardData?.getData("text/plain") ?? "";
+    const text = normalizePlainText(event.clipboardData?.getData("text/plain") ?? "");
     document.execCommand("insertText", false, text);
     updateActiveContent();
+  });
+  elements.contentInput.addEventListener("copy", (event) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    const container = selection.getRangeAt(0).commonAncestorContainer;
+    if (container !== elements.contentInput && !elements.contentInput.contains(container)) return;
+    event.preventDefault();
+    event.clipboardData?.setData("text/plain", normalizePlainText(selection.toString()));
   });
   elements.noteGroupSelect.addEventListener("change", (event) => {
     const note = getActiveNote();
